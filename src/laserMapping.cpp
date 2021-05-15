@@ -141,12 +141,14 @@ nav_msgs::Path laserAfterMappedPath;
 // set initial guess
 void transformAssociateToMap()
 {
+	// (T_w_li_opti * T_l0_li_inverse) * T_l0_lj
 	q_w_curr = q_wmap_wodom * q_wodom_curr;
 	t_w_curr = q_wmap_wodom * t_wodom_curr + t_wmap_wodom;
 }
 
 void transformUpdate()
 {
+	// T_w_li_opti * T_l0_li_inverse
 	q_wmap_wodom = q_w_curr * q_wodom_curr.inverse();
 	t_wmap_wodom = t_w_curr - q_wmap_wodom * t_wodom_curr;
 }
@@ -201,7 +203,7 @@ void laserOdometryHandler(const nav_msgs::Odometry::ConstPtr &laserOdometry)
 	mBuf.unlock();
 
 	// high frequence publish
-	Eigen::Quaterniond q_wodom_curr;
+	Eigen::Quaterniond q_wodom_curr; // frame-to-frame odometry
 	Eigen::Vector3d t_wodom_curr;
 	q_wodom_curr.x() = laserOdometry->pose.pose.orientation.x;
 	q_wodom_curr.y() = laserOdometry->pose.pose.orientation.y;
@@ -211,6 +213,7 @@ void laserOdometryHandler(const nav_msgs::Odometry::ConstPtr &laserOdometry)
 	t_wodom_curr.y() = laserOdometry->pose.pose.position.y;
 	t_wodom_curr.z() = laserOdometry->pose.pose.position.z;
 
+	// accumulate the frame-to-frame transformation to produce high frequency odometry
 	Eigen::Quaterniond q_w_curr = q_wmap_wodom * q_wodom_curr;
 	Eigen::Vector3d t_w_curr = q_wmap_wodom * t_wodom_curr + t_wmap_wodom; 
 
@@ -306,8 +309,12 @@ void process()
 
 			TicToc t_whole;
 
+			// Given initial guess
 			transformAssociateToMap();
 
+/**
+ * @brief: Stage1: prepare the localmap
+ **/
 			TicToc t_shift;
 			int centerCubeI = int((t_w_curr.x() + 25.0) / 50.0) + laserCloudCenWidth;
 			int centerCubeJ = int((t_w_curr.y() + 25.0) / 50.0) + laserCloudCenHeight;
@@ -543,7 +550,11 @@ void process()
 			downSizeFilterCorner.setInputCloud(laserCloudCornerLast);
 			downSizeFilterCorner.filter(*laserCloudCornerStack);
 			int laserCloudCornerStackNum = laserCloudCornerStack->points.size();
+// Stage1
 
+/**
+ * @brief: Stage2: Optimization
+ **/
 			pcl::PointCloud<PointType>::Ptr laserCloudSurfStack(new pcl::PointCloud<PointType>());
 			downSizeFilterSurf.setInputCloud(laserCloudSurfLast);
 			downSizeFilterSurf.filter(*laserCloudSurfStack);
@@ -731,8 +742,12 @@ void process()
 			{
 				ROS_WARN("time Map corner and surf num are not enough");
 			}
+// Stage2
 			transformUpdate();
 
+/**
+ * @brief: Stage3: Classify the point cloud and update the global map
+ **/
 			TicToc t_add;
 			for (int i = 0; i < laserCloudCornerStackNum; i++)
 			{
@@ -800,7 +815,8 @@ void process()
 				laserCloudSurfArray[ind] = tmpSurf;
 			}
 			printf("filter time %f ms \n", t_filter.toc());
-			
+// Stage3
+
 			TicToc t_pub;
 			//publish surround map for every 5 frame
 			if (frameCount % 5 == 0)
