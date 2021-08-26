@@ -798,7 +798,7 @@ void process()
 			}
 			printf("add points time %f ms\n", t_add.toc());
 
-			
+			// downsampling to show the local map
 			TicToc t_filter;
 			for (int i = 0; i < laserCloudValidNum; i++)
 			{
@@ -818,7 +818,7 @@ void process()
 // Stage3
 
 			TicToc t_pub;
-			//publish surround map for every 5 frame
+			//publish local map for every 5 frame
 			if (frameCount % 5 == 0)
 			{
 				laserCloudSurround->clear();
@@ -835,7 +835,8 @@ void process()
 				laserCloudSurround3.header.frame_id = "/camera_init";
 				pubLaserCloudSurround.publish(laserCloudSurround3);
 			}
-
+			
+			// Show the global map
 			if (frameCount % 20 == 0)
 			{
 				pcl::PointCloud<PointType> laserCloudMap;
